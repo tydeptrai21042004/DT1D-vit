@@ -7,7 +7,10 @@ https://github.com/facebookresearch/ConvNeXt/blob/main/models/convnext.py
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from timm.models.layers import trunc_normal_, DropPath
+try:
+    from timm.layers import trunc_normal_, DropPath
+except ImportError:  # timm <= 0.4.x
+    from timm.models.layers import trunc_normal_, DropPath
 
 
 class Block(nn.Module):

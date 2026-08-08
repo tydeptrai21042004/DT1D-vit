@@ -14,7 +14,10 @@ import torch.nn as nn
 import torchvision as tv
 
 from collections import OrderedDict
-from timm.models.layers import trunc_normal_
+try:
+    from timm.layers import trunc_normal_
+except ImportError:  # timm <= 0.4.x
+    from timm.models.layers import trunc_normal_
 
 from .convnext_backbone.convnext import (
     convnext_tiny, convnext_small, convnext_base,

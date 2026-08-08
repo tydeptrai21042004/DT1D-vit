@@ -7,7 +7,10 @@ search "prompt" for details.
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
-from timm.models.layers import DropPath, to_2tuple, trunc_normal_
+try:
+    from timm.layers import DropPath, to_2tuple, trunc_normal_
+except ImportError:  # timm <= 0.4.x
+    from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 
 from ...utils import logging
 logger = logging.get_logger("visual_prompt")

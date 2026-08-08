@@ -5,7 +5,10 @@ from functools import partial
 import torch
 import torch.nn as nn
 
-from timm.models.layers import Mlp, DropPath
+try:
+    from timm.layers import Mlp, DropPath
+except ImportError:  # timm <= 0.4.x
+    from timm.models.layers import Mlp, DropPath
 from timm.models.vision_transformer import Block  # base ViT block
 
 # project logger (avoid clobbering stdlib `logging`)

@@ -11,7 +11,10 @@ from functools import reduce
 from operator import mul
 from torch.nn import Conv2d, Dropout
 
-from timm.models.layers import to_2tuple
+try:
+    from timm.layers import to_2tuple
+except ImportError:  # timm <= 0.4.x
+    from timm.models.layers import to_2tuple
 
 from ..vit_backbones.swin_transformer import (
     BasicLayer, PatchMerging, SwinTransformer, SwinTransformerBlock,

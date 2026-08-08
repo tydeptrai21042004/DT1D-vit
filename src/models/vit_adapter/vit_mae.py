@@ -9,7 +9,10 @@ import torch.nn as nn
 
 from .adapter_block import Pfeiffer_Block
 from ..vit_backbones.vit_mae import VisionTransformer
-from timm.models.layers import PatchEmbed
+try:
+    from timm.layers import PatchEmbed
+except ImportError:  # timm <= 0.4.x
+    from timm.models.layers import PatchEmbed
 from ...utils import logging
 logger = logging.get_logger("visual_prompt")
 
