@@ -16,6 +16,11 @@ def test_final_defaults_match_paper_architecture():
     assert torch.isclose(m.gate.detach(), torch.tensor(0.01))
 
 
+def test_kaggle_active_offsets_string_contract():
+    m = DT1DAdapter(32, active_offsets="1,2,4,8")
+    assert m.active_offsets == (1, 2, 4, 8)
+
+
 def test_joint_l1_projection():
     torch.manual_seed(0)
     m = DT1DAdapter(24)
@@ -43,3 +48,41 @@ def test_channel_contrast_zero_mean_per_full_group():
     a = m.channel_contrast
     assert abs(float(a[:16].sum())) < 1e-6
     assert abs(float(a[16:32].sum())) < 1e-6
+
+
+def test_kaggle_yaml_schema_contracts(tmp_path):
+    import yaml
+    from src.configs.config import get_cfg
+
+    cfg_path = tmp_path / "kaggle_contract.yaml"
+    cfg_path.write_text(yaml.safe_dump({
+        "MODEL": {
+            "ADAPTER": {
+                "REDUCTION_FACTOR": 16,
+                "DT1D": {"ACTIVE_OFFSETS": "1,2,4,8"},
+            }
+        }
+    }), encoding="utf-8")
+    cfg = get_cfg()
+    cfg.merge_from_file(str(cfg_path))
+    assert cfg.MODEL.ADAPTER.REDUCTION_FACTOR == 16
+    assert cfg.MODEL.ADAPTER.DT1D.ACTIVE_OFFSETS == "1,2,4,8"
+
+
+def test_kaggle_pfeiffer_canonical_reduction_factor():
+    from src.configs.config import get_cfg
+    from src.configs import vit_configs
+    from src.models.vit_adapter.vit import ADPT_Block
+
+    cfg = get_cfg()
+    cfg.MODEL.ADAPTER.NAME = "Pfeiffer"
+    cfg.MODEL.ADAPTER.REDUCTION_FACTOR = 16
+    block = ADPT_Block(vit_configs.get_b16_config(), False, cfg.MODEL.ADAPTER, grid_size=(14, 14))
+    assert block.adapter_downsample.out_features == 48
+
+
+def test_kaggle_modern_timm_import_stack():
+    # This import traverses the same eager backbone imports that previously
+    # failed on Kaggle with timm.models.layers.helpers.
+    from src.models import build_vit_backbone
+    assert callable(build_vit_backbone.build_vit_sup_models)
