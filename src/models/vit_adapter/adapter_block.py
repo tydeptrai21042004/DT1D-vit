@@ -74,7 +74,8 @@ class Pfeiffer_Block(Block):
         if adapter_config.STYLE != "Pfeiffer":
             raise ValueError("Only Pfeiffer adapter style is supported here.")
 
-        red = max(1, dim // adapter_config.REDUCATION_FACTOR)
+        red_factor = int(getattr(adapter_config, "REDUCTION_FACTOR", adapter_config.REDUCATION_FACTOR))
+        red = max(1, dim // red_factor)
         self.adapter_downsample = nn.Linear(dim, red)
         self.adapter_act_fn = act_layer()
         self.adapter_upsample = nn.Linear(red, dim)

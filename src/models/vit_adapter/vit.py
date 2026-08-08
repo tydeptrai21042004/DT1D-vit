@@ -40,7 +40,7 @@ class ADPT_Block(nn.Module):
         name = str(getattr(adapter_config, "NAME", "")).lower()
 
         if name == "pfeiffer":
-            red = int(adapter_config.REDUCATION_FACTOR)
+            red = int(getattr(adapter_config, "REDUCTION_FACTOR", adapter_config.REDUCATION_FACTOR))
             self.adapter_downsample = nn.Linear(self.hidden_size, self.hidden_size // red)
             self.adapter_upsample   = nn.Linear(self.hidden_size // red, self.hidden_size)
             self.adapter_act_fn     = ACT2FN["gelu"]

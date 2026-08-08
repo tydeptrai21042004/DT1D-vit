@@ -74,7 +74,8 @@ _C.MODEL.PROMPT.SAVE_FOR_EACH_EPOCH = False
 # Adapter options
 # ----------------------------------------------------------------------
 _C.MODEL.ADAPTER = CfgNode()
-_C.MODEL.ADAPTER.REDUCATION_FACTOR = 8
+_C.MODEL.ADAPTER.REDUCATION_FACTOR = 8  # legacy misspelling kept for old configs
+_C.MODEL.ADAPTER.REDUCTION_FACTOR = 8   # canonical spelling used by reviewer/Kaggle configs
 _C.MODEL.ADAPTER.STYLE = "Pfeiffer"
 
 # Final DT1D-Adapter configuration.
@@ -82,6 +83,8 @@ _C.MODEL.ADAPTER.NAME = "none"  # "DT1D", "Pfeiffer", or "none"
 _C.MODEL.ADAPTER.DT1D = CfgNode()
 _C.MODEL.ADAPTER.DT1D.AXIS = "hw"
 _C.MODEL.ADAPTER.DT1D.GROUP_SIZE = 16
+# Keep this as a string: reviewer/Kaggle configs serialize the sparse offsets
+# as "1,2,4,8", and YACS requires the YAML value type to match the default.
 _C.MODEL.ADAPTER.DT1D.ACTIVE_OFFSETS = "1,2,4,8"
 _C.MODEL.ADAPTER.DT1D.DETAIL_BASIS = "orth"
 _C.MODEL.ADAPTER.DT1D.DETAIL_COMPONENTS = "offset4"
