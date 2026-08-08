@@ -1,0 +1,16 @@
+torch
+torchvision
+numpy
+scipy
+scikit-learn
+pandas
+Pillow
+fvcore
+iopath
+yacs
+simplejson
+termcolor
+tabulate
+tqdm
+ml-collections
+timm==0.4.12

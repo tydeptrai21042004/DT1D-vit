@@ -1,0 +1,45 @@
+import torch
+
+from src.models.vit_adapter.dt1d_adapter import DT1DAdapter, DT1DTokenAdapter
+
+
+def test_final_defaults_match_paper_architecture():
+    m = DT1DAdapter(32)
+    assert m.axis == "hw"
+    assert m.group_size == 16
+    assert m.active_offsets == (1, 2, 4, 8)
+    assert m.detail_components == "offset4"
+    assert m.detail_basis == "orth"
+    assert m.project_l1 is True
+    assert m.use_pointwise is False
+    assert m.convolution_calls_per_forward == 2
+    assert torch.isclose(m.gate.detach(), torch.tensor(0.01))
+
+
+def test_joint_l1_projection():
+    torch.manual_seed(0)
+    m = DT1DAdapter(24)
+    with torch.no_grad():
+        m.base_coefficients.normal_()
+        m.detail_coefficients.normal_()
+    k = m.build_kernels(torch.device("cpu"), torch.float32)
+    mass = k.squeeze(2).abs().sum(-1).sum(0)
+    assert torch.all(mass <= 1.000001)
+
+
+def test_token_adapter_preserves_prefix_token_and_shape():
+    torch.manual_seed(0)
+    m = DT1DTokenAdapter(embed_dim=16, grid_size=(4, 4))
+    x = torch.randn(2, 17, 16, requires_grad=True)
+    y = m(x)
+    assert y.shape == x.shape
+    assert torch.allclose(y[:, :1], x[:, :1])
+    y.mean().backward()
+    assert x.grad is not None
+
+
+def test_channel_contrast_zero_mean_per_full_group():
+    m = DT1DAdapter(32, group_size=16)
+    a = m.channel_contrast
+    assert abs(float(a[:16].sum())) < 1e-6
+    assert abs(float(a[16:32].sum())) < 1e-6
