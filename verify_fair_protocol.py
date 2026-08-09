@@ -66,6 +66,7 @@ def make_args(tmp: Path, dataset="flowers102"):
         log_every=10,
         vpt_tokens=5,
         pfeiffer_reduction=16,
+        dt1d_active_offsets=fair.active_offsets_for_repo_schema(),
         lr_grid=None,
     )
     for m in fair.METHOD_ORDER:

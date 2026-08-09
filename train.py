@@ -55,6 +55,14 @@ def setup(args):
 
 
 
+def _canonical_active_offsets(value):
+    if isinstance(value, str):
+        return [int(x.strip()) for x in value.replace(';', ',').split(',') if x.strip()]
+    if isinstance(value, (tuple, list)):
+        return [int(x) for x in value]
+    raise TypeError(f"Unsupported ACTIVE_OFFSETS value: {value!r}")
+
+
 def _method_signature(cfg):
     """Canonical architecture-only signature for safe resume/auditing."""
     transfer = str(cfg.MODEL.TRANSFER_TYPE)
@@ -81,7 +89,7 @@ def _method_signature(cfg):
         sig["dt1d"] = {
             "axis": str(d.AXIS),
             "group_size": int(d.GROUP_SIZE),
-            "active_offsets": str(d.ACTIVE_OFFSETS),
+            "active_offsets": _canonical_active_offsets(d.ACTIVE_OFFSETS),
             "detail_basis": str(d.DETAIL_BASIS),
             "detail_components": str(d.DETAIL_COMPONENTS),
             "project_l1": bool(d.PROJECT_L1),
@@ -187,7 +195,7 @@ def train(cfg, args):
             "prompt_num_tokens": int(cfg.MODEL.PROMPT.NUM_TOKENS),
             "pfeiffer_reduction_factor": int(cfg.MODEL.ADAPTER.REDUCTION_FACTOR),
             "dt1d_group_size": int(cfg.MODEL.ADAPTER.DT1D.GROUP_SIZE),
-            "dt1d_active_offsets": str(cfg.MODEL.ADAPTER.DT1D.ACTIVE_OFFSETS),
+            "dt1d_active_offsets": _canonical_active_offsets(cfg.MODEL.ADAPTER.DT1D.ACTIVE_OFFSETS),
             "data_path": str(cfg.DATA.DATAPATH),
             "model_root": str(cfg.MODEL.MODEL_ROOT),
             "data_no_test": bool(cfg.DATA.NO_TEST),

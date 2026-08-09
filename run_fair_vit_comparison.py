@@ -29,6 +29,7 @@ import csv
 import hashlib
 import json
 import os
+import shutil
 import statistics
 import subprocess
 import sys
@@ -168,7 +169,61 @@ def deep_merge(base: dict, update: dict) -> dict:
     return out
 
 
-def method_fragment(method: str, vpt_tokens: int, pfeiffer_reduction: int) -> dict:
+def canonical_active_offsets(value) -> tuple[int, ...]:
+    """Normalize DT1D ACTIVE_OFFSETS across old/new config schemas."""
+    if isinstance(value, str):
+        parts = [x.strip() for x in value.replace(';', ',').split(',') if x.strip()]
+        return tuple(int(x) for x in parts)
+    if isinstance(value, (list, tuple)):
+        return tuple(int(x) for x in value)
+    raise TypeError(f"Unsupported ACTIVE_OFFSETS type: {type(value).__name__}: {value!r}")
+
+
+def active_offsets_for_repo_schema():
+    """Return the same semantic offsets using the exact YACS default type.
+
+    Some repository revisions define ACTIVE_OFFSETS as a string while older
+    revisions define a tuple. YACS rejects str<->tuple mismatches during YAML
+    merge, so generated configs must match the checked-out repository schema.
+    """
+    from src.configs.config import get_cfg
+
+    default = get_cfg().MODEL.ADAPTER.DT1D.ACTIVE_OFFSETS
+    offsets = (1, 2, 4, 8)
+    if isinstance(default, str):
+        return ','.join(map(str, offsets))
+    if isinstance(default, tuple):
+        return tuple(offsets)
+    if isinstance(default, list):
+        return list(offsets)
+    raise TypeError(
+        "Unsupported MODEL.ADAPTER.DT1D.ACTIVE_OFFSETS schema type: "
+        f"{type(default).__name__}"
+    )
+
+
+def preflight_yacs_merge(paths: Iterable[Path], label: str) -> None:
+    """Merge every generated YAML through the real YACS schema before GPU work."""
+    from src.configs.config import get_cfg
+
+    paths = list(paths)
+    failures = []
+    for path in paths:
+        try:
+            cfg = get_cfg()
+            cfg.merge_from_file(str(path))
+            cfg.freeze()
+        except Exception as exc:
+            failures.append((str(path), repr(exc)))
+    if failures:
+        detail = '\n'.join(f"  - {p}: {e}" for p, e in failures[:20])
+        raise SystemExit(
+            f"PRE-FLIGHT YACS MERGE FAILED ({len(failures)}/{len(paths)}) for {label}:\n{detail}"
+        )
+    print(f"PRE-FLIGHT YACS MERGE: PASS ({len(paths)}/{len(paths)} configs) [{label}]", flush=True)
+
+
+def method_fragment(method: str, vpt_tokens: int, pfeiffer_reduction: int, dt1d_active_offsets) -> dict:
     if method == "dt1d":
         return {
             "MODEL": {
@@ -178,7 +233,7 @@ def method_fragment(method: str, vpt_tokens: int, pfeiffer_reduction: int) -> di
                     "DT1D": {
                         "AXIS": "hw",
                         "GROUP_SIZE": 16,
-                        "ACTIVE_OFFSETS": "1,2,4,8",
+                        "ACTIVE_OFFSETS": dt1d_active_offsets,
                         "DETAIL_BASIS": "orth",
                         "DETAIL_COMPONENTS": "offset4",
                         "CONTRAST_SPLIT": 8,
@@ -297,7 +352,7 @@ def method_signature_from_dict(cfg: dict) -> str:
         sig["dt1d"] = {
             "axis": str(d.get("AXIS", "hw")),
             "group_size": int(d.get("GROUP_SIZE", 16)),
-            "active_offsets": str(d.get("ACTIVE_OFFSETS", "1,2,4,8")),
+            "active_offsets": list(canonical_active_offsets(d.get("ACTIVE_OFFSETS", (1,2,4,8)))),
             "detail_basis": str(d.get("DETAIL_BASIS", "orth")),
             "detail_components": str(d.get("DETAIL_COMPONENTS", "offset4")),
             "project_l1": bool(d.get("PROJECT_L1", True)),
@@ -314,7 +369,7 @@ def make_config(args, batch_size: int, method: str, lr: float, phase: str) -> di
     no_test = phase == "tune"
     root = Path(args.output_root).resolve() / phase / f"bs{batch_size}" / method
     cfg = common_config(args, batch_size, root, no_test=no_test)
-    cfg = deep_merge(cfg, method_fragment(method, args.vpt_tokens, args.pfeiffer_reduction))
+    cfg = deep_merge(cfg, method_fragment(method, args.vpt_tokens, args.pfeiffer_reduction, args.dt1d_active_offsets))
     cfg["SOLVER"]["OPTIMIZER"] = method_optimizer(method)
     cfg["SOLVER"]["MOMENTUM"] = 0.9
     cfg["SOLVER"]["BASE_LR"] = float(lr)
@@ -468,9 +523,17 @@ def _assert_resume_compatible(summary_path: Path, cfg: dict, seed: int) -> None:
 def run_one(repo_root: Path, cfg_path: Path, cfg: dict, seed: int, gpu: str, log_path: Path) -> Path:
     summary = expected_summary(cfg, seed)
     if summary.exists():
-        _assert_resume_compatible(summary, cfg, seed)
-        print(f"[SKIP] compatible completed run: {summary}", flush=True)
-        return summary
+        try:
+            _assert_resume_compatible(summary, cfg, seed)
+        except Exception as exc:
+            # Never reuse stale results, but do not make the whole notebook fail.
+            # Only the incompatible seed directory is removed and recomputed.
+            stale_dir = summary.parent
+            print(f"[RERUN] incompatible completed run: {summary}\n  reason: {exc}", flush=True)
+            shutil.rmtree(stale_dir, ignore_errors=True)
+        else:
+            print(f"[SKIP] compatible completed run: {summary}", flush=True)
+            return summary
     log_path.parent.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     if gpu != "cpu":
@@ -611,6 +674,15 @@ def main() -> None:
     args = ap.parse_args()
 
     repo_root = Path(__file__).resolve().parent
+    # Detect the checked-out repository schema instead of assuming ACTIVE_OFFSETS
+    # is always a string. This prevents the str-vs-tuple YACS failure seen on Kaggle.
+    args.dt1d_active_offsets = active_offsets_for_repo_schema()
+    print(
+        "DT1D ACTIVE_OFFSETS schema:",
+        type(args.dt1d_active_offsets).__name__,
+        repr(args.dt1d_active_offsets),
+        flush=True,
+    )
     out_root = Path(args.output_root).resolve()
     out_root.mkdir(parents=True, exist_ok=True)
 
@@ -670,6 +742,7 @@ def main() -> None:
                     tuning_configs[(bs, method, lr)] = cfg
                     tuning_paths[(bs, method, lr)] = path
         audit = audit_tuning_configs(tuning_configs, methods, lr_grids)
+        preflight_yacs_merge(tuning_paths.values(), "tuning")
     else:
         audit = {
             "status": "PASS",
@@ -817,6 +890,8 @@ def main() -> None:
             write_yaml(path, cfg)
             final_configs[(bs, method)] = cfg
             final_paths[(bs, method)] = path
+
+    preflight_yacs_merge(final_paths.values(), "final")
 
     final_jobs = []
     for bs in batches:
