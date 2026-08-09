@@ -1,5 +1,8 @@
-"""
-tune lr, wd for fgvc datasets and other datasets with train / val / test splits
+"""Legacy single-method FGVC hyperparameter tuner.
+
+It is validation-only and disables test evaluation while tuning. For a fair
+cross-method manuscript comparison, use run_fair_vit_comparison.py so every
+method receives the same search space and tuning budget.
 """
 import os
 import warnings
@@ -31,6 +34,8 @@ def setup(args, lr, wd, check_runtime=True):
     lr = lr / 256 * cfg.DATA.BATCH_SIZE  # update lr based on the batchsize
     cfg.SOLVER.BASE_LR = lr
     cfg.SOLVER.WEIGHT_DECAY = wd
+    # Hyperparameter tuning must never touch the test set.
+    cfg.DATA.NO_TEST = True
 
     # setup output dir
     # output_dir / data_name / feature_name / lr_wd / run1

@@ -55,15 +55,54 @@ def setup(args):
 
 
 
+def _method_signature(cfg):
+    """Canonical architecture-only signature for safe resume/auditing."""
+    transfer = str(cfg.MODEL.TRANSFER_TYPE)
+    adapter = str(cfg.MODEL.ADAPTER.NAME)
+    sig = {"transfer_type": transfer, "adapter_name": adapter}
+    if transfer == "prompt":
+        sig["prompt"] = {
+            "num_tokens": int(cfg.MODEL.PROMPT.NUM_TOKENS),
+            "location": str(cfg.MODEL.PROMPT.LOCATION),
+            "initiation": str(cfg.MODEL.PROMPT.INITIATION),
+            "project": int(cfg.MODEL.PROMPT.PROJECT),
+            "deep": bool(cfg.MODEL.PROMPT.DEEP),
+            "deep_shared": bool(cfg.MODEL.PROMPT.DEEP_SHARED),
+            "vit_pool_type": str(cfg.MODEL.PROMPT.VIT_POOL_TYPE),
+            "dropout": float(cfg.MODEL.PROMPT.DROPOUT),
+        }
+    if adapter.lower() == "pfeiffer":
+        sig["pfeiffer"] = {
+            "reduction_factor": int(cfg.MODEL.ADAPTER.REDUCTION_FACTOR),
+            "style": str(cfg.MODEL.ADAPTER.STYLE),
+        }
+    if adapter.lower() == "dt1d":
+        d = cfg.MODEL.ADAPTER.DT1D
+        sig["dt1d"] = {
+            "axis": str(d.AXIS),
+            "group_size": int(d.GROUP_SIZE),
+            "active_offsets": str(d.ACTIVE_OFFSETS),
+            "detail_basis": str(d.DETAIL_BASIS),
+            "detail_components": str(d.DETAIL_COMPONENTS),
+            "project_l1": bool(d.PROJECT_L1),
+            "gate_mode": str(d.GATE_MODE),
+            "gate_init": float(d.GATE_INIT),
+            "residual_scale": float(d.RESIDUAL_SCALE),
+            "padding": str(d.PADDING),
+            "use_pointwise": bool(d.USE_POINTWISE),
+        }
+    return json.dumps(sig, sort_keys=True, separators=(",", ":"))
+
+
 def get_loaders(cfg, logger):
-    logger.info("Loading training data (final training data for vtab)...")
-    if cfg.DATA.NAME.startswith("vtab-"):
-        train_loader = data_loader.construct_trainval_loader(cfg)
-    else:
-        train_loader = data_loader.construct_train_loader(cfg)
+    logger.info("Loading training data...")
+    # Keep validation data completely separate from optimization.  In
+    # particular, VTAB uses train800 for optimization and val200 only for
+    # checkpoint/model selection.  The official test split is evaluated once
+    # after restoring the best-validation checkpoint.
+    train_loader = data_loader.construct_train_loader(cfg)
 
     logger.info("Loading validation data...")
-    # not really needed for vtab
     val_loader = data_loader.construct_val_loader(cfg)
     logger.info("Loading test data...")
     if cfg.DATA.NO_TEST:
@@ -81,7 +120,9 @@ def train(cfg, args):
 
     # main training / eval actions here
 
-    # fix the seed for reproducibility
+    # Fix all RNGs before model construction.  DataLoader instances also use
+    # their own seed-derived generators (see src/data/loader.py), so the same
+    # paper seed gives the same sample order/augmentations for every method.
     if cfg.SEED is not None:
         torch.manual_seed(cfg.SEED)
         np.random.seed(cfg.SEED)
@@ -98,6 +139,17 @@ def train(cfg, args):
     train_loader, val_loader, test_loader = get_loaders(cfg, logger)
     logger.info("Constructing models...")
     model, cur_device = build_model(cfg)
+
+    # Model-specific modules consume different amounts of RNG during
+    # initialization.  Reset the training RNG stream after construction so
+    # that the data/augmentation randomness does not depend on which method is
+    # being compared.
+    if cfg.SEED is not None:
+        torch.manual_seed(cfg.SEED)
+        np.random.seed(cfg.SEED)
+        random.seed(cfg.SEED)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(cfg.SEED)
 
     logger.info("Setting up Evalutator...")
     evaluator = Evaluator()
@@ -116,7 +168,37 @@ def train(cfg, args):
     torch.save(evaluator.results, os.path.join(cfg.OUTPUT_DIR, "eval_results.pth"))
     if summary is not None:
         summary = dict(summary)
-        summary["seed"] = cfg.SEED
+        summary.update({
+            "seed": cfg.SEED,
+            "dataset": cfg.DATA.NAME,
+            "feature": cfg.DATA.FEATURE,
+            "batch_size": int(cfg.DATA.BATCH_SIZE),
+            "crop_size": int(cfg.DATA.CROPSIZE),
+            "total_epoch": int(cfg.SOLVER.TOTAL_EPOCH),
+            "optimizer": str(cfg.SOLVER.OPTIMIZER),
+            "momentum": float(cfg.SOLVER.MOMENTUM),
+            "base_lr": float(cfg.SOLVER.BASE_LR),
+            "weight_decay": float(cfg.SOLVER.WEIGHT_DECAY),
+            "scheduler": str(cfg.SOLVER.SCHEDULER),
+            "warmup_epoch": int(cfg.SOLVER.WARMUP_EPOCH),
+            "transfer_type": str(cfg.MODEL.TRANSFER_TYPE),
+            "adapter_name": str(cfg.MODEL.ADAPTER.NAME),
+            "method_signature": _method_signature(cfg),
+            "prompt_num_tokens": int(cfg.MODEL.PROMPT.NUM_TOKENS),
+            "pfeiffer_reduction_factor": int(cfg.MODEL.ADAPTER.REDUCTION_FACTOR),
+            "dt1d_group_size": int(cfg.MODEL.ADAPTER.DT1D.GROUP_SIZE),
+            "dt1d_active_offsets": str(cfg.MODEL.ADAPTER.DT1D.ACTIVE_OFFSETS),
+            "data_path": str(cfg.DATA.DATAPATH),
+            "model_root": str(cfg.MODEL.MODEL_ROOT),
+            "data_no_test": bool(cfg.DATA.NO_TEST),
+            "protocol": (
+                "train800->val200->test@best-val"
+                if cfg.DATA.NAME.startswith("vtab-")
+                else "official-train->official-val->official-test@best-val"
+            ),
+            "total_parameters": int(sum(p.numel() for p in model.parameters())),
+            "trainable_parameters": int(sum(p.numel() for p in model.parameters() if p.requires_grad)),
+        })
         with open(os.path.join(cfg.OUTPUT_DIR, "run_summary.json"), "w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2)
     return summary

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
-"""
-major actions here for training VTAB datasets: use val200 to find best lr/wd, and retrain on train800val200, report results on test
+"""Legacy single-method VTAB tuner.
+
+For cross-method manuscript comparisons use run_fair_vit_comparison.py, which
+enforces the same search budget across every method.  This legacy helper keeps
+train800 and val200 separate and never trains on validation data.
 """
 import glob
 import numpy as np
@@ -53,9 +56,15 @@ def find_best_lrwd(files, data_name):
     for f in files:
         try:
             results_dict = torch.load(f, "cpu")
-            epoch = len(results_dict) - 1
-            val_result = results_dict[f"epoch_{epoch}"]["classification"][t_name]["top1"]
-            val_result = float(val_result)
+            vals = []
+            for epoch_key, epoch_data in results_dict.items():
+                try:
+                    vals.append(float(epoch_data["classification"][t_name]["top1"]))
+                except (KeyError, TypeError, ValueError):
+                    continue
+            if not vals:
+                raise KeyError(f"No validation top1 entries for {t_name}")
+            val_result = max(vals)
         except Exception as e:
             print(f"Encounter issue: {e} for file {f}")
             continue
@@ -163,9 +172,10 @@ def get_loaders(cfg, logger, final_runs=False):
 
     else:
         logger.info("Loading training data...")
-        train_loader = data_loader.construct_trainval_loader(cfg)
+        # Keep train800 and val200 separate. Validation is used only for
+        # checkpoint/model selection and must never be optimized on.
+        train_loader = data_loader.construct_train_loader(cfg)
 
-        # not really nessecary to check the results of val set, but the trainer class does not support no-validation loader yet  # noqa
         logger.info("Loading validation data...")
         val_loader = data_loader.construct_val_loader(cfg)
 
