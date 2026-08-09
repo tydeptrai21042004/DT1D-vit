@@ -45,8 +45,10 @@ class ADPT_Block(nn.Module):
             self.adapter_upsample   = nn.Linear(self.hidden_size // red, self.hidden_size)
             self.adapter_act_fn     = ACT2FN["gelu"]
 
-            # init to near-identity
-            nn.init.zeros_(self.adapter_downsample.weight)
+            # Near-identity, but non-degenerate: the zero up-projection makes
+            # the initial residual exactly zero, while a Xavier-initialized
+            # down-projection allows the branch to start learning immediately.
+            nn.init.xavier_uniform_(self.adapter_downsample.weight)
             nn.init.zeros_(self.adapter_downsample.bias)
             nn.init.zeros_(self.adapter_upsample.weight)
             nn.init.zeros_(self.adapter_upsample.bias)

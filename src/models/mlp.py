@@ -8,8 +8,12 @@ import torch
 from torch import nn
 from typing import List, Type
 
-from ..utils import logging
-logger = logging.get_logger("visual_prompt")
+try:
+    from ..utils import logging
+    logger = logging.get_logger("visual_prompt")
+except ImportError:
+    import logging as _logging
+    logger = _logging.getLogger("visual_prompt")
 
 
 class MLP(nn.Module):
@@ -64,3 +68,19 @@ class MLP(nn.Module):
         x = self.projection(x)
         x = self.last_layer(x)
         return x
+
+
+def build_seeded_classifier_head(input_dim, mlp_dims, seed=None, special_bias=True):
+    """Build an MLP head from a method-independent seed without advancing caller RNG."""
+    state = torch.random.get_rng_state()
+    if seed is not None:
+        torch.manual_seed(int(seed) + 1000003)
+    try:
+        return MLP(
+            input_dim=input_dim,
+            mlp_dims=mlp_dims,
+            special_bias=special_bias,
+        )
+    finally:
+        if seed is not None:
+            torch.random.set_rng_state(state)

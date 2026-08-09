@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
 """Data loader."""
+import random
+
+import numpy as np
 import torch
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler
@@ -20,8 +23,15 @@ _DATASET_CATALOG = {
 }
 
 
+def _seed_worker(worker_id):
+    """Seed NumPy/Python in each worker from PyTorch's deterministic seed."""
+    worker_seed = torch.initial_seed() % (2 ** 32)
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+
+
 def _construct_loader(cfg, split, batch_size, shuffle, drop_last):
-    """Constructs the data loader for the given dataset."""
+    """Construct a deterministic loader for a dataset split."""
     dataset_name = cfg.DATA.NAME
 
     # Construct the dataset
@@ -35,9 +45,18 @@ def _construct_loader(cfg, split, batch_size, shuffle, drop_last):
         ), "Dataset '{}' not supported".format(dataset_name)
         dataset = _DATASET_CATALOG[dataset_name](cfg, split)
 
-    # Create a sampler for multi-process training
-    sampler = DistributedSampler(dataset) if cfg.NUM_GPUS > 1 else None
-    # Create a loader
+    # Use an explicit per-run generator so architecture-specific parameter
+    # initialization cannot perturb sample order or stochastic augmentation.
+    seed = int(cfg.SEED) if cfg.SEED is not None else 0
+    generator = torch.Generator()
+    # Split offsets keep train/val/test streams independent while remaining
+    # identical across methods for a given paper seed.
+    split_offset = {"train": 0, "trainval": 11, "val": 23, "test": 37}.get(split, 0)
+    generator.manual_seed(seed + split_offset)
+
+    # Create a sampler for multi-process training.  Current paper/Kaggle runs
+    # use one visible GPU per process; the generator below controls that path.
+    sampler = DistributedSampler(dataset, seed=seed) if cfg.NUM_GPUS > 1 else None
     loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
@@ -46,6 +65,8 @@ def _construct_loader(cfg, split, batch_size, shuffle, drop_last):
         num_workers=cfg.DATA.NUM_WORKERS,
         pin_memory=cfg.DATA.PIN_MEMORY,
         drop_last=drop_last,
+        worker_init_fn=_seed_worker,
+        generator=generator,
     )
     return loader
 

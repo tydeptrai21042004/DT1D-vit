@@ -14,7 +14,7 @@ from .build_vit_backbone import (
     build_vit_sup_models, build_swin_model,
     build_mocov3_model, build_mae_model
 )
-from .mlp import MLP
+from .mlp import MLP, build_seeded_classifier_head
 from ..utils import logging
 logger = logging.get_logger("visual_prompt")
 
@@ -157,11 +157,16 @@ class ViT(nn.Module):
                 transfer_type))
 
     def setup_head(self, cfg):
-        self.head = MLP(
+        # Adapter/prompt modules consume different amounts of RNG while the
+        # backbone is being constructed.  Build the classifier from a seed
+        # that depends only on the paper seed, so every compared method starts
+        # from the same task-head initialization for that seed.
+        self.head = build_seeded_classifier_head(
             input_dim=self.feat_dim,
             mlp_dims=[self.feat_dim] * self.cfg.MODEL.MLP_NUM + \
                 [cfg.DATA.NUMBER_CLASSES], # noqa
-            special_bias=True
+            seed=cfg.SEED,
+            special_bias=True,
         )
 
     def forward(self, x, return_feature=False):

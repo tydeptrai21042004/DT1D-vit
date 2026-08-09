@@ -6,10 +6,19 @@ import builtins
 import decimal
 import functools
 import logging
-import simplejson
+try:
+    import simplejson
+    _HAS_SIMPLEJSON = True
+except ImportError:  # stdlib fallback for minimal environments
+    import json as simplejson
+    _HAS_SIMPLEJSON = False
 import sys
 import os
-from termcolor import colored
+try:
+    from termcolor import colored
+except ImportError:
+    def colored(text, *args, **kwargs):
+        return text
 
 from .distributed import is_master_process
 from .file_io import PathManager
@@ -158,7 +167,10 @@ def log_json_stats(stats, sort_keys=True):
         k: decimal.Decimal("{:.6f}".format(v)) if isinstance(v, float) else v
         for k, v in stats.items()
     }
-    json_stats = simplejson.dumps(stats, sort_keys=True, use_decimal=True)
+    if _HAS_SIMPLEJSON:
+        json_stats = simplejson.dumps(stats, sort_keys=True, use_decimal=True)
+    else:
+        json_stats = simplejson.dumps(stats, sort_keys=True, default=str)
     if stats["_type"] == "test_epoch" or stats["_type"] == "train_epoch":
         logger.info("json_stats: {:s}".format(json_stats))
     else:

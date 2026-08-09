@@ -15,7 +15,6 @@ from ..vtab_datasets import base
 from ..vtab_datasets import caltech
 from ..vtab_datasets import cifar
 from ..vtab_datasets import clevr
-from ..vtab_datasets import diabetic_retinopathy
 from ..vtab_datasets import dmlab
 from ..vtab_datasets import dsprites
 from ..vtab_datasets import dtd
@@ -168,6 +167,11 @@ def build_tf_dataset(cfg, mode):
     vtab_dataname = cfg.DATA.NAME.split("vtab-")[-1]
     data_dir = cfg.DATA.DATAPATH
     if vtab_dataname in DATASETS:
+        # diabetic_retinopathy has an optional tensorflow-addons dependency.
+        # Import it lazily so unrelated VTAB tasks (e.g. Caltech101) do not
+        # fail merely because that optional package is absent.
+        if vtab_dataname.startswith("diabetic_retinopathy"):
+            from ..vtab_datasets import diabetic_retinopathy  # noqa: F401
         data_cls = Registry.lookup("data." + vtab_dataname)
         vtab_tf_dataloader = data_cls(data_dir=data_dir)
     else:
