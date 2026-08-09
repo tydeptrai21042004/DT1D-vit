@@ -8,9 +8,9 @@ set -Eeuo pipefail
 WORKDIR="${WORKDIR:-/kaggle/working}"
 DATA_DIR="${DATA_DIR:-$WORKDIR/vtab_data}"
 MODEL_ROOT="${MODEL_ROOT:-$WORKDIR/vit_weights}"
-OUTPUT_ROOT="${OUTPUT_ROOT:-$WORKDIR/vtab_caltech101_vitb16_fair_v3}"
-RESULT_ZIP="${RESULT_ZIP:-$WORKDIR/vtab_caltech101_vitb16_fair_v3.zip}"
-PREFLIGHT_ROOT="${PREFLIGHT_ROOT:-$WORKDIR/vtab_caltech101_preflight_v3}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-$WORKDIR/vtab_caltech101_vitb16_fair_v4}"
+RESULT_ZIP="${RESULT_ZIP:-$WORKDIR/vtab_caltech101_vitb16_fair_v4.zip}"
+PREFLIGHT_ROOT="${PREFLIGHT_ROOT:-$WORKDIR/vtab_caltech101_preflight_v4}"
 
 # The script is expected to be executed from the corrected repository root.
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

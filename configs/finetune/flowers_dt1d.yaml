@@ -16,7 +16,6 @@ MODEL:
     DT1D:
       AXIS: "hw"
       GROUP_SIZE: 16
-      ACTIVE_OFFSETS: "1,2,4,8"
       DETAIL_BASIS: "orth"
       DETAIL_COMPONENTS: "offset4"
       CONTRAST_SPLIT: 8
