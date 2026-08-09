@@ -5,7 +5,7 @@ This repository revision was validated specifically against the two reviewer/Kag
 ## Fixes included
 
 - Modern `timm.layers` imports with fallback to legacy `timm.models.layers`.
-- `MODEL.ADAPTER.DT1D.ACTIVE_OFFSETS` schema uses the same string representation (`"1,2,4,8"`) emitted by the Kaggle YAML generators; DT1D parses it internally to `(1, 2, 4, 8)`.
+- `MODEL.ADAPTER.DT1D.ACTIVE_OFFSETS` is intentionally not emitted by fair-runner YAMLs. The runner validates the repository default is semantically `(1, 2, 4, 8)` and inherits it, avoiding YACS string literal-decoding into a tuple.
 - Canonical Pfeiffer `MODEL.ADAPTER.REDUCTION_FACTOR` is accepted and preferred, while the legacy misspelling `REDUCATION_FACTOR` remains as a compatibility alias.
 - AdamW reads `SOLVER.WEIGHT_DECAY` instead of hard-coding `0.01` and uses current PyTorch in-place operation signatures.
 - The source blocks patched by the existing Kaggle cells (VTAB train split and Pfeiffer initialization) are intentionally kept patch-compatible.

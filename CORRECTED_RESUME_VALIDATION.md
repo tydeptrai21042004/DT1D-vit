@@ -4,7 +4,7 @@ Date: 2026-08-09
 
 ## Fixed
 
-- DT1D `ACTIVE_OFFSETS` is generated using the exact type required by the checked-out YACS schema (`str`, `tuple`, or `list`).
+- DT1D `ACTIVE_OFFSETS` is not serialized into generated YAML. The runner validates the repository default is semantically `(1, 2, 4, 8)` and inherits it, avoiding YACS literal-decoding type mismatches.
 - Every generated tuning YAML is merged through the real repository `get_cfg()` before GPU work on Kaggle.
 - Final YAMLs are also preflight-merged before final three-seed runs.
 - Existing `run_summary.json` files are reused only when the complete protocol signature is compatible.

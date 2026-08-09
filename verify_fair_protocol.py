@@ -66,7 +66,6 @@ def make_args(tmp: Path, dataset="flowers102"):
         log_every=10,
         vpt_tokens=5,
         pfeiffer_reduction=16,
-        dt1d_active_offsets=fair.active_offsets_for_repo_schema(),
         lr_grid=None,
     )
     for m in fair.METHOD_ORDER:
@@ -95,6 +94,14 @@ def check_fair_config_generation(tmp: Path):
     for method in fair.METHOD_ORDER:
         for lr in grids[(bs, method)]:
             configs[(bs, method, lr)] = fair.make_config(args, bs, method, lr, "tune")
+
+    # ACTIVE_OFFSETS must never be serialized into generated YAML/config dicts.
+    # YACS literal-decodes the scalar "1,2,4,8" into a tuple and can then reject
+    # the merge against a string-typed repository default.
+    for lr in grids[(bs, "dt1d")]:
+        d = configs[(bs, "dt1d", lr)]["MODEL"]["ADAPTER"]["DT1D"]
+        assert "ACTIVE_OFFSETS" not in d
+    assert fair.validate_dt1d_default_offsets() == (1, 2, 4, 8)
 
     audit = fair.audit_tuning_configs(configs, fair.METHOD_ORDER, grids)
     assert audit["status"] == "PASS"

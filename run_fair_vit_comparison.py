@@ -179,27 +179,26 @@ def canonical_active_offsets(value) -> tuple[int, ...]:
     raise TypeError(f"Unsupported ACTIVE_OFFSETS type: {type(value).__name__}: {value!r}")
 
 
-def active_offsets_for_repo_schema():
-    """Return the same semantic offsets using the exact YACS default type.
+def validate_dt1d_default_offsets() -> tuple[int, ...]:
+    """Validate the repository default without serializing it into YAML.
 
-    Some repository revisions define ACTIVE_OFFSETS as a string while older
-    revisions define a tuple. YACS rejects str<->tuple mismatches during YAML
-    merge, so generated configs must match the checked-out repository schema.
+    YACS applies ``ast.literal_eval`` to string values loaded from YAML.  A YAML
+    scalar such as ``1,2,4,8`` therefore becomes the tuple ``(1, 2, 4, 8)``
+    during merge, even when the repository default is the *string*
+    ``"1,2,4,8"``.  Emitting ACTIVE_OFFSETS in generated YAML is consequently
+    unsafe.  The fair runner inherits the repository default instead and only
+    verifies that its semantic value is the paper value (1, 2, 4, 8).
     """
     from src.configs.config import get_cfg
 
     default = get_cfg().MODEL.ADAPTER.DT1D.ACTIVE_OFFSETS
-    offsets = (1, 2, 4, 8)
-    if isinstance(default, str):
-        return ','.join(map(str, offsets))
-    if isinstance(default, tuple):
-        return tuple(offsets)
-    if isinstance(default, list):
-        return list(offsets)
-    raise TypeError(
-        "Unsupported MODEL.ADAPTER.DT1D.ACTIVE_OFFSETS schema type: "
-        f"{type(default).__name__}"
-    )
+    offsets = canonical_active_offsets(default)
+    if offsets != (1, 2, 4, 8):
+        raise SystemExit(
+            "Unexpected MODEL.ADAPTER.DT1D.ACTIVE_OFFSETS default: "
+            f"{default!r} -> {offsets!r}; expected (1, 2, 4, 8)."
+        )
+    return offsets
 
 
 def preflight_yacs_merge(paths: Iterable[Path], label: str) -> None:
@@ -223,7 +222,7 @@ def preflight_yacs_merge(paths: Iterable[Path], label: str) -> None:
     print(f"PRE-FLIGHT YACS MERGE: PASS ({len(paths)}/{len(paths)} configs) [{label}]", flush=True)
 
 
-def method_fragment(method: str, vpt_tokens: int, pfeiffer_reduction: int, dt1d_active_offsets) -> dict:
+def method_fragment(method: str, vpt_tokens: int, pfeiffer_reduction: int) -> dict:
     if method == "dt1d":
         return {
             "MODEL": {
@@ -233,7 +232,9 @@ def method_fragment(method: str, vpt_tokens: int, pfeiffer_reduction: int, dt1d_
                     "DT1D": {
                         "AXIS": "hw",
                         "GROUP_SIZE": 16,
-                        "ACTIVE_OFFSETS": dt1d_active_offsets,
+                        # ACTIVE_OFFSETS is intentionally omitted.  The repository
+                        # default is semantically (1,2,4,8), and omitting this key
+                        # avoids YACS converting the YAML string into a tuple.
                         "DETAIL_BASIS": "orth",
                         "DETAIL_COMPONENTS": "offset4",
                         "CONTRAST_SPLIT": 8,
@@ -369,7 +370,7 @@ def make_config(args, batch_size: int, method: str, lr: float, phase: str) -> di
     no_test = phase == "tune"
     root = Path(args.output_root).resolve() / phase / f"bs{batch_size}" / method
     cfg = common_config(args, batch_size, root, no_test=no_test)
-    cfg = deep_merge(cfg, method_fragment(method, args.vpt_tokens, args.pfeiffer_reduction, args.dt1d_active_offsets))
+    cfg = deep_merge(cfg, method_fragment(method, args.vpt_tokens, args.pfeiffer_reduction))
     cfg["SOLVER"]["OPTIMIZER"] = method_optimizer(method)
     cfg["SOLVER"]["MOMENTUM"] = 0.9
     cfg["SOLVER"]["BASE_LR"] = float(lr)
@@ -674,13 +675,15 @@ def main() -> None:
     args = ap.parse_args()
 
     repo_root = Path(__file__).resolve().parent
-    # Detect the checked-out repository schema instead of assuming ACTIVE_OFFSETS
-    # is always a string. This prevents the str-vs-tuple YACS failure seen on Kaggle.
-    args.dt1d_active_offsets = active_offsets_for_repo_schema()
+    # Do not serialize ACTIVE_OFFSETS into generated YAML.  YACS literal-decodes
+    # the string "1,2,4,8" into a tuple, which causes a str-vs-tuple merge error
+    # when the repository default is a string.  Validate and inherit the source
+    # default instead.
+    dt1d_offsets = validate_dt1d_default_offsets()
     print(
-        "DT1D ACTIVE_OFFSETS schema:",
-        type(args.dt1d_active_offsets).__name__,
-        repr(args.dt1d_active_offsets),
+        "DT1D ACTIVE_OFFSETS: inherited repository default",
+        dt1d_offsets,
+        "(not emitted into YAML)",
         flush=True,
     )
     out_root = Path(args.output_root).resolve()
