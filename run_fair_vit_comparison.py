@@ -15,7 +15,7 @@ can cause severe under-training.
 Protocol:
 1. Each method receives exactly the same NUMBER of validation-only LR trials.
 2. VPT/Linear use their source-faithful SGD profiles; Full FT uses AdamW;
-   DT1D/Pfeiffer use AdamW profiles appropriate to their implementations.
+   WHC-DT1D/previous-DT1D/Pfeiffer use AdamW profiles appropriate to their implementations.
 3. DATA.NO_TEST=True during tuning, so test data cannot select hyperparameters.
 4. Final seeds are 0/1/2 and test is evaluated once after restoring each seed's
    best-validation checkpoint.
@@ -39,9 +39,10 @@ from typing import Dict, Iterable, List, Tuple
 
 import yaml
 
-METHOD_ORDER = ("dt1d", "full", "linear", "vpt", "pfeiffer")
+METHOD_ORDER = ("whc_dt1d", "dt1d", "full", "linear", "vpt", "pfeiffer")
 DISPLAY = {
-    "dt1d": "DT1D-Adapter",
+    "whc_dt1d": "WHC-Compact-DT1D (p=2, fixed gate)",
+    "dt1d": "Previous DT1D-Adapter",
     "full": "Full fine-tuning",
     "linear": "Linear probing",
     "vpt": "VPT",
@@ -97,7 +98,7 @@ LINEAR_NOMINAL_LRS = (50.0, 25.0, 10.0, 5.0, 2.5, 1.0, 0.5, 0.25, 0.1, 0.05)
 # within/near that source range to give the same 10 LR trials as every method.
 FULL_NOMINAL_LRS = (1e-4, 2e-4, 5e-4, 7.5e-4, 1e-3, 1.5e-3, 2e-3, 2.5e-3, 3.5e-3, 5e-3)
 
-# DT1D/Pfeiffer are not VPT source baselines.  Their AdamW grids are effective
+# WHC-DT1D/previous-DT1D/Pfeiffer are not VPT source baselines.  Their AdamW grids are effective
 # LRs and deliberately contain the values used in the manuscript experiments.
 ADAMW_ADAPTER_LRS = (1e-5, 2.5e-5, 5e-5, 1e-4, 2.5e-4, 5e-4, 1e-3, 2.5e-3, 5e-3, 1e-2)
 
@@ -133,7 +134,7 @@ def source_lr_grid(method: str, batch_size: int) -> list[float]:
         return sorted({float(x) * scale for x in LINEAR_NOMINAL_LRS})
     if method == "full":
         return sorted({float(x) * scale for x in FULL_NOMINAL_LRS})
-    if method in {"dt1d", "pfeiffer"}:
+    if method in {"whc_dt1d", "dt1d", "pfeiffer"}:
         return sorted({float(x) for x in ADAMW_ADAPTER_LRS})
     raise ValueError(method)
 
@@ -177,6 +178,44 @@ def canonical_active_offsets(value) -> tuple[int, ...]:
     if isinstance(value, (list, tuple)):
         return tuple(int(x) for x in value)
     raise TypeError(f"Unsupported ACTIVE_OFFSETS type: {type(value).__name__}: {value!r}")
+
+
+def active_offsets_for_repo_schema() -> str:
+    """Return the previous-DT1D offset value in the repository's YACS type."""
+    from src.configs.config import get_cfg
+    value = get_cfg().MODEL.ADAPTER.DT1D.ACTIVE_OFFSETS
+    offsets = canonical_active_offsets(value)
+    if offsets != (1, 2, 4, 8):
+        raise RuntimeError(f"Unexpected previous DT1D offsets: {value!r}")
+    return str(value)
+
+
+def validate_whc_default() -> dict:
+    """Fail closed unless repository defaults match the final WHC proposal."""
+    from src.configs.config import get_cfg
+    d = get_cfg().MODEL.ADAPTER.WHC_DT1D
+    offsets = canonical_active_offsets(d.ACTIVE_OFFSETS)
+    expected = {
+        "offsets": (1, 2, 4),
+        "p": 2,
+        "gate_mode": "fixed",
+        "gate_init": 0.01,
+        "project_l1": True,
+        "lambda_mode": "learned",
+        "lambda_scope": "block",
+    }
+    observed = {
+        "offsets": offsets,
+        "p": int(d.P),
+        "gate_mode": str(d.GATE_MODE).lower(),
+        "gate_init": float(d.GATE_INIT),
+        "project_l1": bool(d.PROJECT_L1),
+        "lambda_mode": str(d.LAMBDA_MODE).lower(),
+        "lambda_scope": str(d.LAMBDA_SCOPE).lower(),
+    }
+    if observed != expected:
+        raise SystemExit(f"Unexpected WHC final defaults: {observed}; expected {expected}")
+    return observed
 
 
 def validate_dt1d_default_offsets() -> tuple[int, ...]:
@@ -223,6 +262,35 @@ def preflight_yacs_merge(paths: Iterable[Path], label: str) -> None:
 
 
 def method_fragment(method: str, vpt_tokens: int, pfeiffer_reduction: int) -> dict:
+    if method == "whc_dt1d":
+        return {
+            "MODEL": {
+                "TRANSFER_TYPE": "adapter",
+                "ADAPTER": {
+                    "NAME": "WHC_DT1D",
+                    "WHC_DT1D": {
+                        "AXIS": "hw",
+                        "GROUP_SIZE": 16,
+                        "DETAIL_BASIS": "orth",
+                        "DETAIL_COMPONENTS": "offset4",
+                        "CONTRAST_SPLIT": 8,
+                        "PROJECT_L1": True,
+                        "GATE_MODE": "fixed",
+                        "GATE_INIT": 0.01,
+                        "RESIDUAL_SCALE": 1.0,
+                        "PADDING": "replicate",
+                        "USE_POINTWISE": False,
+                        "CACHE_KERNEL": False,
+                        "P": 2,
+                        "LAMBDA_MODE": "learned",
+                        "LAMBDA_SCOPE": "block",
+                        "LAMBDA_INIT": 0.0,
+                        "LAMBDA_MAX": 0.5,
+                        "SHIFT_NORMALIZATION": "mean",
+                    },
+                },
+            }
+        }
     if method == "dt1d":
         return {
             "MODEL": {
@@ -361,6 +429,25 @@ def method_signature_from_dict(cfg: dict) -> str:
             "gate_init": float(d.get("GATE_INIT", 0.01)),
             "residual_scale": float(d.get("RESIDUAL_SCALE", 1.0)),
             "padding": str(d.get("PADDING", "replicate")),
+            "use_pointwise": bool(d.get("USE_POINTWISE", False)),
+        }
+    if adapter.lower() in {"whc_dt1d", "whc-dt1d", "whc"}:
+        d = adapter_cfg.get("WHC_DT1D", {})
+        sig["whc_dt1d"] = {
+            "axis": str(d.get("AXIS", "hw")),
+            "group_size": int(d.get("GROUP_SIZE", 16)),
+            "active_offsets": list(canonical_active_offsets(d.get("ACTIVE_OFFSETS", (1,2,4)))),
+            "detail_basis": str(d.get("DETAIL_BASIS", "orth")),
+            "detail_components": str(d.get("DETAIL_COMPONENTS", "offset4")),
+            "project_l1": bool(d.get("PROJECT_L1", True)),
+            "gate_mode": str(d.get("GATE_MODE", "fixed")),
+            "gate_init": float(d.get("GATE_INIT", 0.01)),
+            "p": int(d.get("P", 2)),
+            "lambda_mode": str(d.get("LAMBDA_MODE", "learned")),
+            "lambda_scope": str(d.get("LAMBDA_SCOPE", "block")),
+            "lambda_init": float(d.get("LAMBDA_INIT", 0.0)),
+            "lambda_max": float(d.get("LAMBDA_MAX", 0.5)),
+            "shift_normalization": str(d.get("SHIFT_NORMALIZATION", "mean")),
             "use_pointwise": bool(d.get("USE_POINTWISE", False)),
         }
     return json.dumps(sig, sort_keys=True, separators=(",", ":"))
@@ -686,6 +773,8 @@ def main() -> None:
         "(not emitted into YAML)",
         flush=True,
     )
+    whc_defaults = validate_whc_default()
+    print("WHC FINAL DEFAULTS:", whc_defaults, flush=True)
     out_root = Path(args.output_root).resolve()
     out_root.mkdir(parents=True, exist_ok=True)
 

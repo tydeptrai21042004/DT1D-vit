@@ -1,11 +1,11 @@
-# DT1D-Adapter on Vision Transformer
+# WHC-Compact-DT1D on Vision Transformer
 
-This repository is a cleaned ViT classification runner for the final DT1D-Adapter used in the manuscript. It is derived from the Visual Prompt Tuning codebase and retains VPT/Pfeiffer/linear/full-finetuning paths as comparison baselines.
+This repository is a cleaned ViT classification runner for the final WHC-Compact-DT1D proposal. The previous DT1D-Adapter remains available only as a reference baseline, alongside VPT, Pfeiffer, linear probing, and full fine-tuning.
 
 
 ## Reviewer-safe fair comparison protocol
 
-For cross-method paper results, use **`run_fair_vit_comparison.py`** instead of hand-written per-method solver settings. The runner enforces the same data split, ViT-B/16 checkpoint, resolution, batch size, epoch budget, weight decay, cosine schedule, tuning seed, final seeds, validation-only selection rule, and **the same number of LR-tuning trials**. Optimizer/LR scale are method-faithful: the original VPT and Linear paths use SGD+momentum with the original batch-scaled LR convention, while Full FT/DT1D/Pfeiffer use AdamW. The VPT implementation files are hash-checked against the user-supplied original VPT source before any run. Test is disabled during tuning and is evaluated once per final seed after restoring that seed's best-validation checkpoint. See `FAIR_COMPARISON.md` and `VPT_SOURCE_FIDELITY.md`.
+For cross-method paper results, use **`run_fair_vit_comparison.py`** instead of hand-written per-method solver settings. The runner enforces the same data split, ViT-B/16 checkpoint, resolution, batch size, epoch budget, weight decay, cosine schedule, tuning seed, final seeds, validation-only selection rule, and **the same number of LR-tuning trials**. Optimizer/LR scale are method-faithful: the original VPT and Linear paths use SGD+momentum with the original batch-scaled LR convention, while Full FT/WHC-Compact-DT1D/previous-DT1D/Pfeiffer use AdamW. The VPT implementation files are hash-checked against the user-supplied original VPT source before any run. Test is disabled during tuning and is evaluated once per final seed after restoring that seed's best-validation checkpoint. See `FAIR_COMPARISON.md` and `VPT_SOURCE_FIDELITY.md`.
 
 Run the fast source/protocol check before expensive GPU jobs:
 
@@ -16,27 +16,34 @@ python verify_vpt_original.py --batch-size 32 --tokens 5
 
 See [`FAIR_COMPARISON.md`](FAIR_COMPARISON.md) and the ready-to-paste Kaggle scripts in [`kaggle_cells/`](kaggle_cells/).
 
-## Final DT1D architecture
+## Final WHC-Compact-DT1D architecture
 
-The DT1D token adapter reshapes ViT patch tokens to a 2D feature grid, applies the final spatial DT1D operator, and restores the token sequence while leaving the class token unchanged. The adopted configuration uses:
+The final token adapter reshapes ViT patch tokens to a 2D feature grid, applies the WHC-Compact-DT1D spatial operator, and restores the token sequence while leaving the class token unchanged. The selected configuration is:
 
-- height and width axial filtering;
-- one 17-tap depthwise convolution per axis;
-- channel groups of 16;
-- symmetric base support at radii 1, 2, 4, and 8 plus the center;
-- one normalized radius-4 zero-sum channel-dependent correction;
-- joint height/width L1 projection;
-- learned residual gate initialized at 0.01;
-- no pointwise mixer in the final method.
+- height + width axial filtering;
+- group-shared compact symmetric support `{0, ±1, ±2, ±4}` (base kernel K9);
+- normalized radius-4 zero-sum channel correction `psi4`;
+- learned block-shared WHC interpolation `lambda = 0.5*tanh(theta)`, initialized at zero;
+- weighted shift parameter `p = 2`;
+- fused effective kernel K13 with no extra convolution branch;
+- joint H/W L1 projection after WHC weighting;
+- **fixed residual gate `gamma = 0.01`**;
+- no pointwise channel mixer.
 
-Only the current final DT1D architecture is included in the proposal path.
+The fused kernel is
+
+```text
+k_W = (1-lambda) k + lambda/2 (S_-2 k + S_+2 k).
+```
+
+The previous `DT1D` R1248/learned-gate implementation is retained only for direct reviewer comparison.
 
 ## Three-seed single-method runs
 
 `run_three_seeds.py` is retained for single-method checks, but it does **not** perform equal-budget hyperparameter selection across baselines. Do not use it as the source of a cross-method fairness claim. For the manuscript comparison, use `run_fair_vit_comparison.py` above.
 
 ```bash
-python run_three_seeds.py --config-file configs/finetune/flowers_dt1d.yaml
+python run_three_seeds.py --config-file configs/finetune/flowers_whc_dt1d.yaml
 ```
 
 The paper final seeds are exactly `0,1,2`. The trainer selects the checkpoint by validation accuracy and evaluates the test set once after restoring the best-validation trainable parameters.
@@ -44,17 +51,17 @@ The paper final seeds are exactly `0,1,2`. The trainer selects the checkpoint by
 Aggregate a completed three-seed experiment with:
 
 ```bash
-python aggregate_three_seeds.py outputs/dt1d_flowers
+python aggregate_three_seeds.py outputs/whc_dt1d_flowers
 ```
 
-## Final DT1D config keys
+## Final WHC config keys
 
-Use `MODEL.ADAPTER.NAME: "DT1D"` and configure `MODEL.ADAPTER.DT1D`. See `configs/finetune/flowers_dt1d.yaml`.
+Use `MODEL.ADAPTER.NAME: "WHC_DT1D"` and configure `MODEL.ADAPTER.WHC_DT1D`. See `configs/finetune/flowers_whc_dt1d.yaml` and `configs/vtab/caltech101_whc_dt1d.yaml`. Reviewer-driven design controls are listed in `configs/ablations/whc_p2_fixed_gate_vit.yaml`.
 
 ## Tests
 
 ```bash
-pytest -q tests/test_dt1d_token_adapter.py
+pytest -q tests/test_dt1d_token_adapter.py tests/test_whc_compact_dt1d_token_adapter.py
 ```
 
 ## Upstream attribution

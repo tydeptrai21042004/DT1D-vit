@@ -83,6 +83,7 @@ def check_fair_config_generation(tmp: Path):
     assert fair.method_optimizer("vpt") == "sgd"
     assert fair.method_optimizer("linear") == "sgd"
     assert fair.method_optimizer("full") == "adamw"
+    assert fair.method_optimizer("whc_dt1d") == "adamw"
     assert fair.method_optimizer("dt1d") == "adamw"
     assert fair.method_optimizer("pfeiffer") == "adamw"
 
@@ -102,6 +103,13 @@ def check_fair_config_generation(tmp: Path):
         d = configs[(bs, "dt1d", lr)]["MODEL"]["ADAPTER"]["DT1D"]
         assert "ACTIVE_OFFSETS" not in d
     assert fair.validate_dt1d_default_offsets() == (1, 2, 4, 8)
+    for lr in grids[(bs, "whc_dt1d")]:
+        d = configs[(bs, "whc_dt1d", lr)]["MODEL"]["ADAPTER"]["WHC_DT1D"]
+        assert "ACTIVE_OFFSETS" not in d
+        assert d["P"] == 2
+        assert d["GATE_MODE"] == "fixed"
+        assert d["GATE_INIT"] == 0.01
+    assert fair.validate_whc_default()["offsets"] == (1, 2, 4)
 
     audit = fair.audit_tuning_configs(configs, fair.METHOD_ORDER, grids)
     assert audit["status"] == "PASS"
@@ -151,7 +159,8 @@ def main():
             "VPT": "SGD+momentum (original source)",
             "Linear": "SGD+momentum (original source)",
             "Full fine-tuning": "AdamW (original source)",
-            "DT1D-Adapter": "AdamW",
+            "WHC-Compact-DT1D": "AdamW",
+            "Previous DT1D-Adapter": "AdamW",
             "Pfeiffer Adapter": "AdamW",
         },
         "vpt_lr_rule": "nominal LR * batch_size / 256 (original source tuning rule)",

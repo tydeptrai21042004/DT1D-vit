@@ -1,0 +1,29 @@
+{
+  "proposal": "WHC-Compact-DT1D-R124-P2-L1-FixedGate001",
+  "base_support": [
+    1,
+    2,
+    4
+  ],
+  "whc_p": 2,
+  "base_kernel_size": 9,
+  "effective_kernel_size": 13,
+  "gate_mode": "fixed",
+  "gate_value": 0.009999999776482582,
+  "gate_is_trainable": false,
+  "lambda_mode": "learned",
+  "lambda_scope": "block",
+  "lambda_init": 0.0,
+  "joint_l1_max": 1.0000001192092896,
+  "lambda_gradient_abs_sum": 0.00027255964232608676,
+  "class_token_preserved": true,
+  "vit_b16_blocks": 12,
+  "old_dt1d_adapter_params_per_block": 577,
+  "whc_adapter_params_per_block": 481,
+  "old_dt1d_adapter_params_12_blocks": 6924,
+  "whc_adapter_params_12_blocks": 5772,
+  "adapter_param_reduction_pct": 16.63778162911612,
+  "old_dt1d_axial_macs_224": 61415424,
+  "whc_axial_macs_224": 46964736,
+  "adapter_mac_reduction_pct": 23.529411764705884
+}

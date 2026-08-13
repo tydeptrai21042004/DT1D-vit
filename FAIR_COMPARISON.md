@@ -4,7 +4,7 @@ Use `run_fair_vit_comparison.py` for manuscript/reviewer comparisons.
 
 ## Fair does not mean forcing one optimizer on every method
 
-The previous failed runs used a tiny SGD learning rate for VPT/Linear while DT1D used AdamW with a much larger LR. That is not a faithful VPT baseline.
+The previous failed runs used a tiny SGD learning rate for VPT/Linear while the adapter methods used AdamW with a much larger LR. That is not a faithful VPT baseline.
 
 The corrected protocol holds the experimental budget equal while preserving method-native optimization:
 
@@ -26,7 +26,8 @@ Method-specific optimizer/LR scale is allowed because the methods were originall
 
 | Method | Optimizer in corrected protocol | LR source |
 |---|---|---|
-| DT1D-Adapter | AdamW | 10-value adapter grid containing manuscript settings |
+| WHC-Compact-DT1D (final p=2, fixed gate) | AdamW | 10-value adapter grid containing manuscript settings |
+| Previous DT1D-Adapter | AdamW | same 10-value adapter grid |
 | Full fine-tuning | AdamW | VPT-source fine-tuning range, batch-scaled and densified to 10 candidates |
 | Linear probing | SGD + momentum 0.9 | original VPT linear-tuning range, scaled by `batch_size/256` |
 | VPT | SGD + momentum 0.9 | original VPT prompt-tuning range, scaled by `batch_size/256` |

@@ -3,7 +3,7 @@ import torch
 from src.models.vit_adapter.dt1d_adapter import DT1DAdapter, DT1DTokenAdapter
 
 
-def test_final_defaults_match_paper_architecture():
+def test_previous_dt1d_reference_defaults_remain_available():
     m = DT1DAdapter(32)
     assert m.axis == "hw"
     assert m.group_size == 16

@@ -99,6 +99,27 @@ def _method_signature(cfg):
             "padding": str(d.PADDING),
             "use_pointwise": bool(d.USE_POINTWISE),
         }
+    if adapter.lower() in {"whc_dt1d", "whc-dt1d", "whc"}:
+        d = cfg.MODEL.ADAPTER.WHC_DT1D
+        sig["whc_dt1d"] = {
+            "axis": str(d.AXIS),
+            "group_size": int(d.GROUP_SIZE),
+            "active_offsets": _canonical_active_offsets(d.ACTIVE_OFFSETS),
+            "detail_basis": str(d.DETAIL_BASIS),
+            "detail_components": str(d.DETAIL_COMPONENTS),
+            "project_l1": bool(d.PROJECT_L1),
+            "gate_mode": str(d.GATE_MODE),
+            "gate_init": float(d.GATE_INIT),
+            "residual_scale": float(d.RESIDUAL_SCALE),
+            "padding": str(d.PADDING),
+            "use_pointwise": bool(d.USE_POINTWISE),
+            "p": int(d.P),
+            "lambda_mode": str(d.LAMBDA_MODE),
+            "lambda_scope": str(d.LAMBDA_SCOPE),
+            "lambda_init": float(d.LAMBDA_INIT),
+            "lambda_max": float(d.LAMBDA_MAX),
+            "shift_normalization": str(d.SHIFT_NORMALIZATION),
+        }
     return json.dumps(sig, sort_keys=True, separators=(",", ":"))
 
 
@@ -196,6 +217,12 @@ def train(cfg, args):
             "pfeiffer_reduction_factor": int(cfg.MODEL.ADAPTER.REDUCTION_FACTOR),
             "dt1d_group_size": int(cfg.MODEL.ADAPTER.DT1D.GROUP_SIZE),
             "dt1d_active_offsets": _canonical_active_offsets(cfg.MODEL.ADAPTER.DT1D.ACTIVE_OFFSETS),
+            "whc_group_size": int(cfg.MODEL.ADAPTER.WHC_DT1D.GROUP_SIZE),
+            "whc_active_offsets": _canonical_active_offsets(cfg.MODEL.ADAPTER.WHC_DT1D.ACTIVE_OFFSETS),
+            "whc_p": int(cfg.MODEL.ADAPTER.WHC_DT1D.P),
+            "whc_gate_mode": str(cfg.MODEL.ADAPTER.WHC_DT1D.GATE_MODE),
+            "whc_gate_init": float(cfg.MODEL.ADAPTER.WHC_DT1D.GATE_INIT),
+            "whc_lambda_mode": str(cfg.MODEL.ADAPTER.WHC_DT1D.LAMBDA_MODE),
             "data_path": str(cfg.DATA.DATAPATH),
             "model_root": str(cfg.MODEL.MODEL_ROOT),
             "data_no_test": bool(cfg.DATA.NO_TEST),

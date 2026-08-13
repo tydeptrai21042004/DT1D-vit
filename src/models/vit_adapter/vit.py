@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ViT with Pfeiffer or final DT1D token adapters.
+ViT with Pfeiffer, previous DT1D, or final WHC-Compact-DT1D token adapters.
 """
 import copy
 import numpy as np
@@ -16,6 +16,7 @@ from ...utils import logging
 logger = logging.get_logger("visual_prompt")
 
 from .dt1d_adapter import DT1DTokenAdapter
+from .whc_compact_dt1d_adapter import WHCCompactDT1DTokenAdapter
 
 
 class ADPT_Block(nn.Module):
@@ -24,7 +25,8 @@ class ADPT_Block(nn.Module):
 
     Supported:
       - adapter_config.NAME == "Pfeiffer": classic down->act->up MLP adapter
-      - adapter_config.NAME == "DT1D": token-space DT1D on patch tokens
+      - adapter_config.NAME == "DT1D": previous token-space DT1D baseline
+      - adapter_config.NAME == "WHC_DT1D": final WHC-Compact-DT1D proposal
     """
     def __init__(self, config, vis, adapter_config, grid_size=None):
         super().__init__()
@@ -77,6 +79,36 @@ class ADPT_Block(nn.Module):
                 use_bn=d.USE_BN,
                 cache_kernel=d.CACHE_KERNEL,
             )
+        elif name in {"whc_dt1d", "whc-dt1d", "whc"}:
+            if grid_size is None:
+                raise ValueError("grid_size (H, W) is required for WHC-DT1D token adaptation")
+            d = adapter_config.WHC_DT1D
+            self.token_adapter = WHCCompactDT1DTokenAdapter(
+                embed_dim=self.hidden_size,
+                grid_size=(int(grid_size[0]), int(grid_size[1])),
+                axis=d.AXIS,
+                group_size=d.GROUP_SIZE,
+                active_offsets=d.ACTIVE_OFFSETS,
+                detail_basis=d.DETAIL_BASIS,
+                detail_components=d.DETAIL_COMPONENTS,
+                contrast_split=d.CONTRAST_SPLIT,
+                project_l1=d.PROJECT_L1,
+                gate_mode=d.GATE_MODE,
+                gate_init=d.GATE_INIT,
+                residual_scale=d.RESIDUAL_SCALE,
+                padding_mode=d.PADDING,
+                use_pointwise=d.USE_POINTWISE,
+                pointwise_ratio=d.POINTWISE_RATIO,
+                pointwise_groups=d.POINTWISE_GROUPS,
+                use_bn=d.USE_BN,
+                cache_kernel=d.CACHE_KERNEL,
+                whc_p=d.P,
+                whc_lambda_mode=d.LAMBDA_MODE,
+                whc_lambda_scope=d.LAMBDA_SCOPE,
+                whc_lambda_init=d.LAMBDA_INIT,
+                whc_lambda_max=d.LAMBDA_MAX,
+                whc_shift_normalization=d.SHIFT_NORMALIZATION,
+            )
         elif name in ("", "none", "null"):
             pass  # no adapter
         else:
@@ -100,8 +132,8 @@ class ADPT_Block(nn.Module):
             adpt = self.adapter_act_fn(adpt)
             adpt = self.adapter_upsample(adpt)
             x = x + adpt
-        elif name == "dt1d" and self.token_adapter is not None:
-            # DT1DTokenAdapter contains its own small residual gate
+        elif name in {"dt1d", "whc_dt1d", "whc-dt1d", "whc"} and self.token_adapter is not None:
+            # Token adapters contain their own residual injection rule.
             x = self.token_adapter(x)
 
         # MLP residual

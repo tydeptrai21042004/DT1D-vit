@@ -1,0 +1,47 @@
+_BASE_: ../base-finetune.yaml
+
+DATA:
+  NAME: "vtab-caltech101"
+  DATAPATH: "/content/data/vtab"
+  NUMBER_CLASSES: 102
+  MULTILABEL: False
+  FEATURE: "sup_vitb16_224"
+  BATCH_SIZE: 64
+
+MODEL:
+  TYPE: "vit"
+  TRANSFER_TYPE: "adapter"
+  ADAPTER:
+    NAME: "WHC_DT1D"
+    WHC_DT1D:
+      AXIS: "hw"
+      GROUP_SIZE: 16
+      ACTIVE_OFFSETS: "1,2,4"
+      DETAIL_BASIS: "orth"
+      DETAIL_COMPONENTS: "offset4"
+      CONTRAST_SPLIT: 8
+      PROJECT_L1: True
+      GATE_MODE: "fixed"
+      GATE_INIT: 0.01
+      RESIDUAL_SCALE: 1.0
+      PADDING: "replicate"
+      USE_POINTWISE: False
+      CACHE_KERNEL: False
+      P: 2
+      LAMBDA_MODE: "learned"
+      LAMBDA_SCOPE: "block"
+      LAMBDA_INIT: 0.0
+      LAMBDA_MAX: 0.5
+      SHIFT_NORMALIZATION: "mean"
+
+SOLVER:
+  TOTAL_EPOCH: 100
+  BASE_LR: 5.0e-3
+  WEIGHT_DECAY: 0.0001
+  OPTIMIZER: "adamw"
+  SCHEDULER: "cosine"
+  WARMUP_EPOCH: 5
+  LOG_EVERY_N: 10
+
+RUN_N_TIMES: 3
+OUTPUT_DIR: "outputs/whc_dt1d_vtab_caltech101"

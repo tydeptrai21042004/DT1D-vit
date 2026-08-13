@@ -1,0 +1,47 @@
+WHC-Compact-DT1D p=2 Fixed-Gate update applied to DT1D-vit-main(10).zip
+
+FINAL PROPOSAL
+  WHC-Compact-DT1D-R124-P2-L1-FixedGate001
+  support={1,2,4}; p=2; effective K13; H+W; group=16
+  learned block-shared WHC lambda, lambda_init=0, lambda_max=0.5
+  fixed residual gate gamma=0.01; joint L1 projection; psi4 ON; pointwise OFF
+
+ViT-B/16 structural validation (12 blocks, 14x14 patch grid):
+  previous DT1D adapter params: 6924
+  final WHC adapter params:     5772
+  adapter parameter reduction:  16.6378%
+  previous DT1D axial MACs:      61415424
+  final WHC axial MACs:          46964736
+  adapter MAC reduction:         23.5294%
+
+MODIFIED FILES
+  * FAIR_COMPARISON.md
+  * README.md
+  * run_fair_vit_comparison.py
+  * src/configs/config.py
+  * src/models/vit_adapter/__init__.py
+  * src/models/vit_adapter/adapter_block.py
+  * src/models/vit_adapter/vit.py
+  * tests/test_dt1d_token_adapter.py
+  * train.py
+  * verify_fair_protocol.py
+
+ADDED FILES
+  + WHC_P2_VIT_VALIDATION.json
+  + configs/ablations/whc_p2_fixed_gate_vit.yaml
+  + configs/finetune/flowers_whc_dt1d.yaml
+  + configs/vtab/caltech101_whc_dt1d.yaml
+  + run_whc_p2_vit_ablation.py
+  + src/models/vit_adapter/whc_compact_dt1d_adapter.py
+  + tests/test_whc_compact_dt1d_token_adapter.py
+  + validate_whc_p2_vit.py
+
+VALIDATION PERFORMED
+  PASS: Python syntax compilation for all modified Python modules
+  PASS: dependency-light WHC ViT structural validator
+  PASS: p=2 / K13 / fixed gate / L1 / lambda-gradient / CLS-token preservation checks
+  PASS: final WHC adapter dry-run ablation planner
+  PASS: original VPT source-fidelity hashes remain unchanged
+  NOTE: full pytest was not executable in this sandbox because optional repo
+        dependencies fvcore/timm/ml-collections are not installed and network
+        package installation is unavailable here.

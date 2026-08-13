@@ -16,6 +16,7 @@ from ...utils import logging as vlogging
 logger = vlogging.get_logger("visual_prompt")
 
 from .dt1d_adapter import DT1DTokenAdapter
+from .whc_compact_dt1d_adapter import WHCCompactDT1DTokenAdapter
 
 
 def build_adapter(name, embed_dim, grid_size, cfg):
@@ -42,6 +43,34 @@ def build_adapter(name, embed_dim, grid_size, cfg):
             pointwise_groups=d.POINTWISE_GROUPS,
             use_bn=d.USE_BN,
             cache_kernel=d.CACHE_KERNEL,
+        )
+    if name in {"whc_dt1d", "whc-dt1d", "whc"}:
+        d = cfg.ADAPTER.WHC_DT1D
+        return WHCCompactDT1DTokenAdapter(
+            embed_dim=embed_dim,
+            grid_size=grid_size,
+            axis=d.AXIS,
+            group_size=d.GROUP_SIZE,
+            active_offsets=d.ACTIVE_OFFSETS,
+            detail_basis=d.DETAIL_BASIS,
+            detail_components=d.DETAIL_COMPONENTS,
+            contrast_split=d.CONTRAST_SPLIT,
+            project_l1=d.PROJECT_L1,
+            gate_mode=d.GATE_MODE,
+            gate_init=d.GATE_INIT,
+            residual_scale=d.RESIDUAL_SCALE,
+            padding_mode=d.PADDING,
+            use_pointwise=d.USE_POINTWISE,
+            pointwise_ratio=d.POINTWISE_RATIO,
+            pointwise_groups=d.POINTWISE_GROUPS,
+            use_bn=d.USE_BN,
+            cache_kernel=d.CACHE_KERNEL,
+            whc_p=d.P,
+            whc_lambda_mode=d.LAMBDA_MODE,
+            whc_lambda_scope=d.LAMBDA_SCOPE,
+            whc_lambda_init=d.LAMBDA_INIT,
+            whc_lambda_max=d.LAMBDA_MAX,
+            whc_shift_normalization=d.SHIFT_NORMALIZATION,
         )
     return None
 
